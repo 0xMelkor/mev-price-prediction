@@ -36,10 +36,15 @@ impl Oracles {
 
     /// Returns a list of ChainLink oracles for all reserves on AAVE V2.
     ///
-    /// Some reserves might not have a ChainLink oracle associated.
+    /// Some reserves might not have a ChainLink oracle associated, in that case we just print an error.
+    /// 
+    /// # Why some oracles are missing?
     /// This is the case of WETH, that is used as the base currency on AAVE V2.
     /// This means that the value of all other reserves is expressed in WETH.
     /// In other words there's no reason to track the value of WETH, since will always be 1 WETH.
+    /// 
+    /// Other token feeds might also be not covered by Chainlink i.e. xSUSHI/WETH, LUSD/WETH..
+    /// 
     pub async fn find_all(&self) -> Result<Vec<Oracle>, Box<dyn Error>> {
         let mut oracles = vec![];
         let token_list: Vec<TokenData> = self.reserve_list().await?;
