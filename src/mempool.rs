@@ -1,4 +1,3 @@
-
 use ethers::{
     core::abi::AbiDecode,
     prelude::abigen,
@@ -7,7 +6,7 @@ use ethers::{
 };
 use tokio::sync::mpsc::Sender;
 
-use crate::config::Config;
+use crate::{config::Config, BackrunOpportunity};
 
 abigen!(
     OffchainAggregator,
@@ -15,15 +14,15 @@ abigen!(
         function transmit(bytes calldata report, bytes32[] calldata rs, bytes32[] calldata ss, bytes32 rawVs) external
     ]"#
 );
- 
+
 /// Intercepts pending transactions in the mempool that are submitted by the ChainLink network
 /// to update an asset's price. These transactions are sent to an `OffChainAggregator` smart contract.
 ///
 /// * `tx` is a feedback channel used to notifify the caller about pending transactions.
 /// * `oracle` is the actual address of the `OffChainAggregator`, that we use as a filter.
-/// 
+///
 /// NOTE: That `oracle` is relative to a single ERC20 token.
-pub fn subscribe_mempool_events(tx: Sender<U256>, oracle: Address) {
+pub fn subscribe_mempool_events(tx: Sender<BackrunOpportunity>, oracle: Address) {
     tokio::spawn(async move {
         let config = Config::new();
         let ws_url = config.ws_url;
@@ -62,7 +61,7 @@ pub fn subscribe_mempool_events(tx: Sender<U256>, oracle: Address) {
                         }
 
                         // Try to decode the transaction and extract the new price
-                        if let Ok(decoded) = TransmitCall::decode(txn.input) {
+                        if let Ok(decoded) = TransmitCall::decode(txn.input.clone()) {
                             let report: Bytes = decoded.report;
                             let mut observations: Vec<U256> = vec![];
                             const WORD_SIZE: usize = 32;
@@ -70,15 +69,19 @@ pub fn subscribe_mempool_events(tx: Sender<U256>, oracle: Address) {
                                 observations.push(U256::from(word));
                             }
 
-
                             // Chainlink network provides a list of sorted price observations in the txn.
-                            // The smart contract takes the median of all values. The median represents the 
+                            // The smart contract takes the median of all values. The median represents the
                             // new price that will be written on-chain
                             // ==========================================================================
                             // Same logic as OffchainAggregator.sol:L614
                             // https://github.com/smartcontractkit/libocr/blob/master/contract/OffchainAggregator.sol
                             if let Some(median) = observations.get(observations.len() / 2) {
-                                tx.send(*median).await.unwrap();
+                                tx.send(BackrunOpportunity {
+                                    new_price: *median,
+                                    transaction: txn,
+                                })
+                                .await
+                                .unwrap();
                             }
                         }
                     }
@@ -108,4 +111,3 @@ async fn is_pending(txn: &Transaction, provider: &Provider<Ws>) -> bool {
         Ok(None) => true,
     }
 }
-
