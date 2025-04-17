@@ -10,4 +10,3 @@ Runs this with these environment variables
  cargo run
 ```
 
-Checkout my [blog post](https://www.0xmelkor.me/articles/backrunning-1-2), where I talk about this!
